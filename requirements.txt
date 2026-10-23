@@ -1,0 +1,13 @@
+# Direct dependencies. `make setup` installs the exact, tested set from
+# requirements.lock.txt instead; edit this file, then `make lock` to refresh it.
+torch==2.13.0
+torchaudio==2.11.0
+transformers==5.14.1
+huggingface-hub==1.26.1
+accelerate==1.14.0
+peft==0.20.0          # only for granite-speech-4.1 (LoRA adapters); 5.0 has none
+soundfile==0.14.0
+numpy==2.5.1
+requests==2.34.2
+certifi>=2026.10.19   # emSign CA removed (eMudhra key incident, 2026-10-20)
+yt-dlp[default]==2026.10.21
