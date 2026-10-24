@@ -24,38 +24,95 @@ Mistral. Keep that in mind for audio you would not upload anywhere.
 Two other modes:
 
 - **Fully local, free:** `DE=granite` translates to German with Granite on the
-  GPU instead. It's noticeably worse (see [Benchmarks](#benchmarks)) and is
+  GPU instead. It's noticeably worse (see [Benchmarks](#german-granite-50-vs-voxtral)) and is
   meant as a fallback for offline or private material.
 - **No model at all:** `make youtube-captions` uses a YouTube video's own caption
   track, one language at a time.
-
-This project absorbed the former `~/youtube-transcriber` (YouTube captions with
-a faster-whisper fallback). See [History](#history).
 
 ## Benchmarks
 
 Measured on this machine (RTX 5080 16 GB, WSL2). RTFx = audio duration ÷
 processing time, so higher is faster.
 
-**Speed and cost**
+### German: Granite 5.0 vs Voxtral
+
+**Material:** the first 10 minutes (600 s) of Harvard Business Review's
+interview [*How McKinsey Plans to Survive AI (and Reinvent
+Consulting)*](https://www.youtube.com/watch?v=hSpem_oGAf0): two speakers,
+conversational, business jargon. Both runs used the same file, so they got
+the same 26 pause-cut blocks and identical English (26/26 blocks). Only the
+German differs.
+
+| | Granite 5.0 (`DE=granite`) | Voxtral Small (**default**) |
+|---|---|---|
+| GPU time | 133.8 s (2 passes, RTFx 4.5) | 59.0 s (1 pass, RTFx 10.2) |
+| translation time | included above | 22.3 s (4 parallel requests) |
+| end to end | 148 s | **95 s** |
+| cost | $0 | $0.060 |
+| blocks flagged untranslated / looping | 0 | 0 |
+| meaning errors, invented words, wrong terms ¹ | **~17** | **~4** |
+| "AI" (should be "KI" in German) | 7× "AI", 3× "IA" | 10× "KI", 0× "AI" |
+| form of address | switches du/Sie, even within one sentence | consistent Sie |
+
+¹ Counted by reading all 26 blocks side by side against the English: one
+careful reviewer, not an automatic score.
+
+Typical Granite errors, all from this clip:
+
+| English | Granite 5.0 | Voxtral |
+|---|---|---|
+| an outcomes-based model | ein … **ausgewogenes** Modell (*balanced*) | ein … ergebnisorientiertes Modell |
+| rewire the organization to realize the value | die Organisation neu **anstecken**, um den Wert zu **erahnen** (*infect*, *guess*) | die Organisation neu verdrahten, um den Wert zu realisieren |
+| a fast follower | ein schneller **Nachfolger** (*successor*) | schnell nachziehen |
+| origination, credit scoring, collection | **Herkunft**, Kreditbewertung, **Sammlung** | Kreditvergabe, Bonitätsprüfung, Inkasso |
+| truly novel co-creation | neuere **Koinzession** (not a word) | neuartige Co-Kreation |
+| a client-facing side | eine **Klientenfassende** Seite (not a word) | eine kundenorientierte Seite |
+| a boatload | eine **Bootsladung** (literal) | eine Menge |
+
+Voxtral's mistakes on the same clip: "what does your org look like" became
+"wie sieht **York** aus" (a mishearing), "research tank" became
+"Forschungstank" (the English transcript has the same mishearing), it added
+half a sentence at one block's end, and "disrupted" became a literal
+"gestört" (Granite did the same).
+
+**Verdict.** Granite 5.0 is a real step up from 4.1: no more copied-through
+English or loops, and it reads fluently at a glance. But it gets the meaning
+wrong often enough that you can't trust it unread, and the flags don't catch
+these errors. Voxtral is better on every axis here except price, and at $0.06
+per 10 minutes it stays the default. `DE=granite` is for audio that must not
+leave the machine.
+
+To reproduce (needs the OpenRouter key; about $0.06):
+
+```bash
+yt-dlp -f bestaudio -o full.webm 'https://www.youtube.com/watch?v=hSpem_oGAf0'
+mkdir -p src && ffmpeg -i full.webm -t 600 -vn -c:a copy src/first10min.webm
+make local SRC=src OUT=bench/granite DE=granite
+make local SRC=src OUT=bench/voxtral DE=voxtral
+```
+
+### Speed and cost, all runs
 
 | material | pipeline | GPU time | RTFx | Voxtral time | cost |
 |---|---|---|---|---|---|
-| YouTube interview, 6.3 min, 17 blocks | Granite 5.0 EN + Voxtral DE (**default**, with punctuation retry) | 47.6 s | **7.9** | 11.7 s (4 parallel) | $0.037 |
-| same clip | Granite 5.0 EN + Voxtral DE, before the retry existed | 38.2 s | 9.9 | 11.7 s | $0.037 |
-| same clip | Granite 4.1 EN + Voxtral DE | 40.0 s | 9.4 | 13.5 s | $0.037 |
-| same clip | Granite 4.1 EN + Granite 4.1 DE (`DE=granite`) | 93.2 s | 4.0 | – | $0 |
-| same clip | YouTube captions (`youtube-captions`) | – | – | – | $0, 19 s total incl. download |
-| Pluralsight course, 6 videos, 35.3 min, 89 blocks | Granite 4.1 EN + Granite 4.1 DE | 381.7 s | 5.5 | – | $0 |
-| same course | Voxtral DE added afterwards (`make german`) | – | – | – | ≈ $0.21 |
+| HBR interview, 10 min, 26 blocks | Granite 5.0 EN + Voxtral DE (**default**) | 59.0 s | **10.2** | 22.3 s | $0.060 |
+| same | Granite 5.0 EN + Granite 5.0 DE (`DE=granite`) | 133.8 s | 4.5 | – | $0 |
+| career interview, 6.3 min, 17 blocks | Granite 5.0 EN + Voxtral DE (with punctuation retry) | 47.6 s | 7.9 | 11.7 s | $0.037 |
+| same | Granite 5.0 EN + Voxtral DE, before the retry existed | 38.2 s | 9.9 | 11.7 s | $0.037 |
+| same | Granite 4.1 EN + Voxtral DE | 40.0 s | 9.4 | 13.5 s | $0.037 |
+| same | Granite 4.1 EN + Granite 4.1 DE | 93.2 s | 4.0 | – | $0 |
+| same | YouTube captions (`youtube-captions`) | – | – | – | $0, 19 s total incl. download |
+| narrated training videos, 6 videos, 35.3 min, 89 blocks | Granite 4.1 EN + Granite 4.1 DE | 381.7 s | 5.5 | – | $0 |
+| same | Voxtral DE added afterwards (`make german`) | – | – | – | ≈ $0.21 |
 
-The course was measured before the switch to 5.0, and its source videos are no
-longer at their original path, so it hasn't been re-run. The default run on
-the clip takes about a minute end to end; model load is ~3 s once the weights
-are cached. Running Voxtral for German halves the GPU work, because Granite
-makes one pass per block instead of two.
+Voxtral costs about $0.006 per minute of audio. Running it for German halves
+the GPU work, because Granite makes one pass per block instead of two. Model
+load is ~3 s once the weights are cached. Speech-to-text runs sequentially,
+block by block (no batching), with about 4.6 GB of the 16 GB VRAM in use.
 
-**English: Granite 5.0 vs 4.1** (same 17 blocks of the YouTube interview)
+### English: Granite 5.0 vs 4.1
+
+Same 17 blocks of the 6.3-min career interview:
 
 | | 4.1 | 5.0 |
 |---|---|---|
@@ -64,32 +121,26 @@ makes one pass per block instead of two.
 | blocks with **no punctuation at all** | 0 | 4, of which a retry fixes 2; the other 2 are flagged `unpunctuated` |
 | GPU time | 40.0 s | 38.2 s (47.6 s with retries) |
 
-So on this clip the words are a draw and 5.0 is worse on punctuation. The
-punctuation failures are flaky: the same block can come back punctuated on
-one run and bare on the next. IBM's published gains for 5.0 are on short-form
-English, noisy and distant speech, and long-form translation; this clip is
-clean conversational audio. `ARGS='--model ibm-granite/granite-speech-4.1-2b'`
-goes back to 4.1 for comparison.
+So the words are a draw and 5.0 is worse on punctuation. The failures are
+flaky: the same block can come back punctuated on one run and bare on the
+next. On the 10-min HBR interview, 3 of 26 English blocks stayed unpunctuated
+after the retry and are flagged.
 
 **Longer blocks don't help.** 5.0 accepts segments of up to ~2 minutes (IBM's
-recommendation), so 60 s and 100 s blocks were tried on the same clip: about
-as fast (RTFx 11.2 / 9.1), still with unpunctuated blocks, and the 60 s run
-**silently dropped a whole 28-word passage**. Default blocks stay at ~24 s.
+recommendation), so 60 s and 100 s blocks were tried on the career interview:
+about as fast (RTFx 11.2 / 9.1), still with unpunctuated blocks, and the 60 s
+run **silently dropped a whole 28-word passage**. Default blocks stay at ~24 s.
 
-**Quality** (German blocks the [quality guards](#quality-guards) flagged)
+### Earlier: German with Granite 4.1
 
-| material | Granite German | Voxtral German |
+| material | Granite 4.1 German | Voxtral German |
 |---|---|---|
-| course (89 blocks, scripted narration) | 2 flagged, plus unflagged meaning errors | **0** |
-| YouTube interview (17 blocks, conversational) | **8 flagged** untranslated, plus a 4× repetition loop | **0** |
+| narrated training videos (89 blocks) | 2 flagged, plus unflagged meaning errors | **0** |
+| career interview (17 blocks) | **8 flagged** untranslated, plus a 4× repetition loop | **0** |
 
-On 13 aligned course blocks, Granite's and Voxtral's **English** agreed
-word-for-word on every block, which is why English stays on the free local
-model. The German was not close: see [Why Voxtral for German](#why-voxtral-for-german)
-for the specific errors.
-
-Speech-to-text runs sequentially, block by block (no batching), and about 4.6 GB
-of the 16 GB VRAM is in use with 5.0 loaded.
+On 13 aligned blocks of the training videos, Granite's and Voxtral's
+**English** agreed word-for-word on every block. That is why English stays on
+the free local model.
 
 ## Quick start
 
@@ -294,9 +345,6 @@ torchaudio from the cu128 index, and the mismatch fails at import with
 `OSError: libcudart.so.12: cannot open shared object file`. If you hit that,
 `uv pip install --reinstall-package torchaudio torchaudio` repairs it.
 
-`peft` is only needed for Granite 4.1, which ships LoRA adapters; 5.0 has none.
-It stays installed so `--model ibm-granite/granite-speech-4.1-2b` keeps working.
-
 Key versions: torch 2.13.0+cu130, torchaudio 2.11.0+cu130, transformers
 5.14.1 (Granite Speech needs ≥ 4.52.1), huggingface-hub 1.26.1, yt-dlp
 2026.10.21. Note transformers 5.x renamed `torch_dtype` to `dtype`; the
@@ -390,13 +438,13 @@ output is how bad transcripts become invisible ones.
   conversational YouTube test, Granite's German repeated a 13-word sentence 4×
   without being flagged.
 - **Untranslated passthrough.** Granite sometimes answers the AST prompt with
-  the transcript instead, usually on blocks opening with a name. The course
-  intro ("Hi, I'm Alex Tashinsky…") is exactly such a case. Detected by word
-  *sequence* similarity between source and target.
+  the transcript instead, usually on blocks that open with a speaker
+  introducing themselves by name. Detected by word *sequence* similarity
+  between source and target.
 
   Sequence, not vocabulary overlap: overlap only tells you both sides mention
   Anthropic and OpenAI, and it false-positives at 0.63 on a short brand-heavy
-  sentence that is a perfectly good translation. On the course, sequence
+  sentence that is a perfectly good translation. On narrated training videos, sequence
   similarity gives passthrough ≥ 0.98, real translations ≤ 0.21, and that
   brand-heavy sentence 0.56, so the 0.6 threshold has margin on both sides.
 
@@ -405,8 +453,7 @@ output is how bad transcripts become invisible ones.
   stream. Such a block (15+ words, under 1 mark per 100 words; normal speech
   here has 8–25) is retried once with `... Write complete sentences.` added,
   and the better-punctuated result is kept. If it's still bare it is flagged
-  `unpunctuated`. On the interview clip this took 4 bare blocks to 2 flagged.
-  None of the 4.1 course blocks trip it.
+  `unpunctuated`. On the career interview this took 4 bare blocks to 2 flagged.
 
 Flags live in each block's `flags` map (`{"de": "untranslated"}`) and render as
 a marked, ⚠-annotated block in the HTML, so a reviewer can jump straight to the
@@ -414,8 +461,7 @@ blocks worth re-checking.
 
 ## Prompts
 
-Taken verbatim from the 5.0 model card's "preferred prompt by task" table
-(unchanged from 4.1). Granite silently falls back to plain transcription on an
+Taken verbatim from the model card's "preferred prompt by task" table. Granite silently falls back to plain transcription on an
 unrecognised prompt rather than erroring, so improvising here degrades quality
 invisibly. The one exception is the punctuation retry above, which only adds a
 sentence and only runs on blocks that already failed.
@@ -424,88 +470,33 @@ sentence and only runs on blocks that already failed.
 - AST: `translate the speech to German with proper punctuation and capitalization.`
 
 Keyword biasing is also available (`transcribe the speech to text. Keywords: ...`,
-up to 2 000 keywords in 5.0) and is worth wiring in for product names or
-jargon. IBM reports meaningful F1 gains on keyword recall. 5.0 also accepts a
+up to 2 000 keywords) and is worth wiring in for product names or
+jargon. IBM reports meaningful F1 gains on keyword recall. Granite also accepts a
 language hint (`The speech is in English. Transcribe it exactly; do not
 translate. ...`); in a test it made the punctuation problem worse, so it is
 not used.
 
-## Why Voxtral for German
+## German via Voxtral
 
-German is Voxtral Small by default. The key is read from `OPENROUTER_API_KEY`
-or `~/.openrouter_key`:
+Voxtral needs an OpenRouter key in `OPENROUTER_API_KEY` or `~/.openrouter_key`:
 
 ```bash
 echo 'sk-or-v1-...' > ~/.openrouter_key && chmod 600 ~/.openrouter_key
 ```
 
-Each run prints an estimate up front (`budget : ~$0.04 ...`) and the actual
-spend at the end. `MAX_SPEND` (default $1.00) stops new videos from starting
-once it is passed. Blocks that are silent, or where Granite heard nothing, are
-not sent.
+Each run prints a cost estimate up front and the actual spend at the end.
+`MAX_SPEND` (default $1.00) stops new videos from starting once it is passed.
+Silent blocks aren't sent. For why German isn't on Granite, see
+[German: Granite 5.0 vs Voxtral](#german-granite-50-vs-voxtral).
 
-**Older transcripts with Granite German** (made before the switch, or with
-`DE=granite`) can be upgraded afterwards. `make german` (`voxtral_de.py`)
-replaces only the German leg and keeps Granite's version under each block's
-`text_prev`, so the change stays auditable:
+Transcripts made with `DE=granite` can get Voxtral German afterwards with
+`make german OUT=<dir>` (`make german-dry` prices it first). It replaces only
+the German and keeps Granite's version under `text_prev`. Transcripts that
+already have Voxtral German are skipped.
 
-```bash
-make german-dry OUT=out          # what it would cost
-make german     OUT=out
-.venv/bin/python compare_voxtral.py out/<file>.json -n 8   # A/B a sample of blocks
-```
-
-It skips transcripts that already have Voxtral German (`FORCE=1` redoes them)
-and leaves single-language ones (e.g. from captions) alone.
-
-**Why.** Measured on 13 aligned blocks of the course (same spans, so only the
-models differ):
-
-- **English was a tie.** Word-for-word identical on all 13 blocks; 7 matched
-  byte-for-byte and the rest differed only in punctuation, where Voxtral was
-  slightly better (fixed a comma splice and a missing sentence break). Two
-  independent architectures agreeing on every word is a strong correctness
-  signal, so the English is *not* worth re-running.
-- **German was not close.** Granite produced actual errors, not just stiffness:
-  `total cycle time` → `Gesamtkostenrechnung` (total *cost accounting*, which
-  is the wrong meaning), `sollte die Frage lautet` (ungrammatical),
-  `Dies ist, wo …` (no main verb), the invented `Geschäftswertigkeit`, and it
-  wrote "AI" 28× where a German transcript wants "KI". Voxtral got all of
-  these right.
-- Flagged blocks across the course went **2 → 0**: both untranslated-passthrough
-  blocks disappeared.
-
-Conversational YouTube content is harder still for Granite's German: on a
-6-minute interview clip, 8 of 17 blocks were flagged untranslated, and one
-13-word sentence looped 4×. Voxtral on the same blocks: 0 flagged.
-
-**Note `voxtral-mini-transcribe` cannot do this.** Its modalities are
-`['audio'] -> ['transcription']`: it returns the *spoken* language, so on
-English audio it yields English no matter how you prompt it. Only Voxtral Small
-does translation.
-
-### Making German local too
-
-Voxtral Small 24B is Apache 2.0 and fits a 16 GB card at 4-bit: `IQ4_XS` is
-12.76 GB, leaving ~3 GB for KV cache and the audio encoder (`Q4_K_M` at
-14.33 GB is too tight). Running it under llama.cpp would make the default
-pipeline fully local with the same German quality. Not set up here; until then
-`DE=granite` is the local option.
-
-## Swapping the model
-
-The English model is `--model` / `--revision` (via `ARGS=` in make):
-
-- `ibm-granite/granite-speech-4.1-2b`: the previous version, better punctuation
-  on the interview clip (see [Benchmarks](#benchmarks)).
-- `ibm-granite/granite-speech-4.1-2b-plus`: 4.1 plus word-level timestamps and
-  speaker attribution.
-
-A model other than the default is loaded from `main` unless `--revision` is
-given. Download it first with
-`.venv/bin/python -m pipeline.models --model <id>` if the machine will be
-offline later. Each transcript's JSON records the model and revision it was
-made with.
+Voxtral Small is Apache 2.0 and would fit the 16 GB card at 4-bit (`IQ4_XS`,
+12.76 GB) under llama.cpp, which would make German local too. That isn't set
+up; `DE=granite` is the local option until then.
 
 ## Code layout
 
@@ -524,24 +515,3 @@ pipeline/
   asr.py                 Granite Speech wrapper + repetition/passthrough/punctuation detectors
   render.py              HTML, SRT, TXT and index pages
 ```
-
-## History
-
-Until 2026-10 there were two projects:
-
-- `~/transcribe`: this pipeline, local files only.
-- `~/youtube-transcriber`: YouTube URL → captions, falling back to local
-  `faster-whisper large-v3`; `.txt`/`.srt`/`.json` in one language.
-
-They were merged here. Whisper was dropped rather than carried over: Granite
-covers English, and German needs translation from audio (Voxtral, or Granite
-as the local fallback), which Whisper cannot do (it only translates *into*
-English). Dropping it
-also removed a second 2.7 GB environment with its own CUDA library wiring
-(CTranslate2 needed pip-installed cuBLAS/cuDNN preloaded by hand). It would
-only be worth bringing back for languages outside Granite's six
-(en/fr/de/es/pt/ja).
-
-What carried over: the yt-dlp handling (JS-runtime detection), the VTT parser
-with rolling-caption dedupe, and SRT/TXT output. The old project and its
-transcripts have since been deleted.
