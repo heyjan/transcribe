@@ -48,7 +48,6 @@ German differs.
 | GPU time | 133.8 s (2 passes, RTFx 4.5) | 59.0 s (1 pass, RTFx 10.2) |
 | translation time | included above | 22.3 s (4 parallel requests) |
 | end to end | 148 s | **95 s** |
-| cost | $0 | $0.060 |
 | blocks flagged untranslated / looping | 0 | 0 |
 | meaning errors, invented words, wrong terms ¹ | **~17** | **~4** |
 | "AI" (should be "KI" in German) | 7× "AI", 3× "IA" | 10× "KI", 0× "AI" |
@@ -69,20 +68,13 @@ Typical Granite errors, all from this clip:
 | a client-facing side | eine **Klientenfassende** Seite (not a word) | eine kundenorientierte Seite |
 | a boatload | eine **Bootsladung** (literal) | eine Menge |
 
-Voxtral's mistakes on the same clip: "what does your org look like" became
-"wie sieht **York** aus" (a mishearing), "research tank" became
-"Forschungstank" (the English transcript has the same mishearing), it added
-half a sentence at one block's end, and "disrupted" became a literal
-"gestört" (Granite did the same).
-
 **Verdict.** Granite 5.0 is a real step up from 4.1: no more copied-through
 English or loops, and it reads fluently at a glance. But it gets the meaning
 wrong often enough that you can't trust it unread, and the flags don't catch
-these errors. Voxtral is better on every axis here except price, and at $0.06
-per 10 minutes it stays the default. `DE=granite` is for audio that must not
-leave the machine.
+these errors. Voxtral is better on every axis here and stays the default.
+`DE=granite` is for audio that must not leave the machine.
 
-To reproduce (needs the OpenRouter key; about $0.06):
+To reproduce (needs the OpenRouter key):
 
 ```bash
 yt-dlp -f bestaudio -o full.webm 'https://www.youtube.com/watch?v=hSpem_oGAf0'
@@ -90,25 +82,6 @@ mkdir -p src && ffmpeg -i full.webm -t 600 -vn -c:a copy src/first10min.webm
 make local SRC=src OUT=bench/granite DE=granite
 make local SRC=src OUT=bench/voxtral DE=voxtral
 ```
-
-### Speed and cost, all runs
-
-| material | pipeline | GPU time | RTFx | Voxtral time | cost |
-|---|---|---|---|---|---|
-| HBR interview, 10 min, 26 blocks | Granite 5.0 EN + Voxtral DE (**default**) | 59.0 s | **10.2** | 22.3 s | $0.060 |
-| same | Granite 5.0 EN + Granite 5.0 DE (`DE=granite`) | 133.8 s | 4.5 | – | $0 |
-| career interview, 6.3 min, 17 blocks | Granite 5.0 EN + Voxtral DE (with punctuation retry) | 47.6 s | 7.9 | 11.7 s | $0.037 |
-| same | Granite 5.0 EN + Voxtral DE, before the retry existed | 38.2 s | 9.9 | 11.7 s | $0.037 |
-| same | Granite 4.1 EN + Voxtral DE | 40.0 s | 9.4 | 13.5 s | $0.037 |
-| same | Granite 4.1 EN + Granite 4.1 DE | 93.2 s | 4.0 | – | $0 |
-| same | YouTube captions (`youtube-captions`) | – | – | – | $0, 19 s total incl. download |
-| narrated training videos, 6 videos, 35.3 min, 89 blocks | Granite 4.1 EN + Granite 4.1 DE | 381.7 s | 5.5 | – | $0 |
-| same | Voxtral DE added afterwards (`make german`) | – | – | – | ≈ $0.21 |
-
-Voxtral costs about $0.006 per minute of audio. Running it for German halves
-the GPU work, because Granite makes one pass per block instead of two. Model
-load is ~3 s once the weights are cached. Speech-to-text runs sequentially,
-block by block (no batching), with about 4.6 GB of the 16 GB VRAM in use.
 
 ### English: Granite 5.0 vs 4.1
 
@@ -130,17 +103,6 @@ after the retry and are flagged.
 recommendation), so 60 s and 100 s blocks were tried on the career interview:
 about as fast (RTFx 11.2 / 9.1), still with unpunctuated blocks, and the 60 s
 run **silently dropped a whole 28-word passage**. Default blocks stay at ~24 s.
-
-### Earlier: German with Granite 4.1
-
-| material | Granite 4.1 German | Voxtral German |
-|---|---|---|
-| narrated training videos (89 blocks) | 2 flagged, plus unflagged meaning errors | **0** |
-| career interview (17 blocks) | **8 flagged** untranslated, plus a 4× repetition loop | **0** |
-
-On 13 aligned blocks of the training videos, Granite's and Voxtral's
-**English** agreed word-for-word on every block. That is why English stays on
-the free local model.
 
 ## Quick start
 
